@@ -1,0 +1,38 @@
+services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    container_name: webgis_postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: webgis
+      POSTGRES_PASSWORD: webgis_dev_password
+      POSTGRES_DB: mine_monitoring
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webgis -d mine_monitoring"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: webgis_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@webgis.local
+      PGADMIN_DEFAULT_PASSWORD: admin_dev_password
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  pgadmin_data:
