@@ -1,0 +1,42 @@
+name: Sentinel-2 monitor
+
+# Adds the latest month's Sentinel-2 observation to the production database.
+# Run it by hand (Actions -> Sentinel-2 monitor -> Run workflow) to backfill a range.
+on:
+  schedule:
+    - cron: "17 3 6 * *"   # 03:17 UTC on the 6th of every month
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First month (YYYY-MM); leave empty for the last full month only"
+        required: false
+      end:
+        description: "Last month (YYYY-MM)"
+        required: false
+      step:
+        description: "Months between observations (1 = monthly, 3 = quarterly)"
+        required: false
+        default: "1"
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -r monitoring/requirements.txt
+      - name: Run monitor
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::NEON_DATABASE_URL secret is not set"; exit 1; fi
+          if [ -n "${{ inputs.start }}" ] && [ -n "${{ inputs.end }}" ]; then
+            python -m monitoring.s2_monitor --start "${{ inputs.start }}" --end "${{ inputs.end }}" --step "${{ inputs.step || 1 }}"
+          else
+            python -m monitoring.s2_monitor --latest
+          fi

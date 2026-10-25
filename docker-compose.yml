@@ -1,3 +1,6 @@
+# One command: `docker compose up --build`
+#   map + API   -> http://localhost:8000      (API docs at /docs)
+#   pgAdmin     -> http://localhost:8080
 services:
   postgis:
     image: postgis/postgis:16-3.4
@@ -16,6 +19,35 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # One-shot job: georeference the legacy layers and load them into PostGIS
+  migrate:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    container_name: webgis_migrate
+    environment:
+      DATABASE_URL: postgresql://webgis:webgis_dev_password@postgis:5432/mine_monitoring
+    working_dir: /app/data_migration
+    command: ["python", "load_data.py"]
+    depends_on:
+      postgis:
+        condition: service_healthy
+
+  api:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    container_name: webgis_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://webgis:webgis_dev_password@postgis:5432/mine_monitoring
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   pgadmin:
     image: dpage/pgadmin4:latest

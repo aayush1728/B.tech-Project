@@ -1,0 +1,16 @@
+# Render Blueprint: the API + map as one Docker web service on the free plan.
+# The database lives on Neon (free PostGIS); its URL is entered in Render's dashboard.
+# autoDeploy is off: GitHub Actions triggers the deploy hook only after CI passes.
+services:
+  - type: web
+    name: surkha-mine-monitor
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        sync: false

@@ -1,0 +1,126 @@
+name: CI/CD
+
+# test -> docker smoke test -> (main only) publish image, migrate prod DB, deploy, verify live
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: webgis
+          POSTGRES_PASSWORD: webgis_dev_password
+          POSTGRES_DB: mine_monitoring
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U webgis -d mine_monitoring"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://webgis:webgis_dev_password@localhost:5432/mine_monitoring
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: >-
+          pip install -r backend/requirements-dev.txt -r data_migration/requirements.txt
+          -r monitoring/requirements.txt
+      - name: Lint
+        run: ruff check .
+      - name: Georeference + load layers into PostGIS
+        run: python data_migration/load_data.py
+      - name: Tests
+        working-directory: backend
+        run: pytest -v
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and smoke-test the full stack
+        run: |
+          docker compose up -d --build --wait api
+          curl -fsS http://localhost:8000/health
+          curl -fsS http://localhost:8000/api/stats/summary
+          curl -fsS http://localhost:8000/api/monitoring/timeseries
+          curl -fsS -o /dev/null http://localhost:8000/
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
+
+  deploy:
+    # Continuous delivery: only for pushes to main that passed both jobs above
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [test, docker]
+    runs-on: ubuntu-latest
+    concurrency: production
+    permissions:
+      contents: read
+      packages: write
+    env:
+      NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      LIVE_URL: ${{ vars.LIVE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish image to GitHub Container Registry
+        run: |
+          IMAGE=ghcr.io/$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')/surkha-mine-monitor
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -f backend/Dockerfile -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Check deployment secrets
+        id: cfg
+        run: |
+          if [ -n "$NEON_DATABASE_URL" ] && [ -n "$RENDER_DEPLOY_HOOK_URL" ] && [ -n "$LIVE_URL" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Deployment skipped: set NEON_DATABASE_URL and RENDER_DEPLOY_HOOK_URL secrets and the LIVE_URL variable (see DEPLOY.md)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Migrate production database (Neon)
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          pip install -r data_migration/requirements.txt
+          python data_migration/load_data.py
+
+      - name: Trigger Render deploy
+        if: steps.cfg.outputs.ready == 'true'
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+
+      - name: Wait until this commit is live
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          for i in $(seq 1 60); do
+            commit=$(curl -fsS --max-time 20 "$LIVE_URL/health" | python -c "import sys, json; print(json.load(sys.stdin).get('commit', ''))" || true)
+            echo "attempt $i: live commit = ${commit:-none}"
+            if [ "$commit" = "${{ github.sha }}" ]; then break; fi
+            sleep 15
+          done
+          [ "$commit" = "${{ github.sha }}" ] || { echo "::error::new build did not go live within 15 minutes"; exit 1; }
+          curl -fsS "$LIVE_URL/api/stats/summary"
+          echo "Deployed ${{ github.sha }} to $LIVE_URL" >> "$GITHUB_STEP_SUMMARY"

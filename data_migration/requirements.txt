@@ -1,2 +1,6 @@
-psycopg2-binary==2.9.9
+psycopg2-binary>=2.9.10
 python-dotenv==1.0.1
+pyproj>=3.6
+shapely>=2.0
+numpy>=1.26
+# make_plan_overlay.py only: pip install opencv-python-headless

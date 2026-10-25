@@ -1,0 +1,6 @@
+.git
+.env
+legacy
+exports
+**/__pycache__
+**/.pytest_cache

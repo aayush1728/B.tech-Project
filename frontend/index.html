@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Surkha Mine Monitor</title>
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <aside id="panel">
+    <header>
+      <h1>Surkha (North) Lignite Mine</h1>
+      <p class="sub">Bhavnagar, Gujarat &middot; Gujarat Mineral Development Corporation</p>
+    </header>
+
+    <section>
+      <h2>Site at a glance</h2>
+      <dl id="stats" class="facts"><dt>Loading&hellip;</dt></dl>
+    </section>
+
+    <section>
+      <h2>Land cover from Sentinel-2</h2>
+      <p id="lulc-meta" class="note">Loading&hellip;</p>
+      <div id="lulc-tools" hidden>
+        <label class="field">Date
+          <select id="lulc-date"></select>
+        </label>
+        <ul id="lulc-legend" class="legend-list"></ul>
+        <p class="caption">Change inside the lease over time (hectares). Click the chart to choose a date.</p>
+        <div id="lulc-chart" class="chart"></div>
+      </div>
+    </section>
+
+    <details>
+      <summary>Compare two dates</summary>
+      <div id="cmp-tools" hidden>
+        <label class="field">From <select id="cmp-from"></select></label>
+        <label class="field">To <select id="cmp-to"></select></label>
+        <button id="cmp-run" type="button">Show what changed</button>
+        <div id="cmp-result" class="result"></div>
+      </div>
+      <p id="cmp-empty" class="note">Available once satellite data is loaded.</p>
+    </details>
+
+    <details>
+      <summary>Map layers</summary>
+      <ul id="layer-list" class="layer-list"></ul>
+      <label class="check"><input id="plan-toggle" type="checkbox"> Original GMDC plan</label>
+      <label class="field slim">Plan opacity
+        <input id="plan-opacity" type="range" min="10" max="100" value="60">
+      </label>
+    </details>
+
+    <details>
+      <summary>More analysis</summary>
+      <h3>Water near the pit</h3>
+      <label class="field slim">Distance
+        <input id="buffer" type="range" min="0" max="1000" step="25" value="0">
+        <span class="val"><span id="buffer-val">0</span> m</span>
+      </label>
+      <div id="setback" class="result"></div>
+
+      <h3>Ground bare for six scenes in a row</h3>
+      <button id="mon-alerts" type="button" class="quiet">Show on map</button>
+      <div id="alerts-result" class="result"></div>
+
+      <h3>Lignite beyond the lease line</h3>
+      <label class="check"><input id="outside-toggle" type="checkbox"> Show on map</label>
+      <div id="outside" class="result"></div>
+    </details>
+
+    <footer>Tip: click anywhere on the map to see what is there.</footer>
+  </aside>
+
+  <main id="map"></main>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="app.js?v=2"></script>
+</body>
+</html>
