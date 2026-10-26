@@ -1,6 +1,6 @@
 # Surkha Mine Monitor: Web GIS + Sentinel-2 change monitoring
 
-A full-stack rebuild of a static mine-site GIS export into a live monitoring app.
+A full-stack mine-site monitoring app.
 
 - **Stack:** PostGIS + FastAPI + Leaflet.js, plus a monthly **Sentinel-2** pipeline that tracks
   excavation, water and vegetation across the lease since 2019.
